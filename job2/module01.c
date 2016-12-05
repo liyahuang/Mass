@@ -8,6 +8,10 @@ static int display_init(void)
 
 	for_each_process(p)
 	{
+		if (p->mm !=NULL)
+		{
+			continue;
+		}
 		printk(KERN_ALERT"%20s%20d%10d",p->comm,p->pid,p->state);
 	}
 	return 0;

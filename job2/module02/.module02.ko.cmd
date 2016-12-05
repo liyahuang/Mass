@@ -1,0 +1,1 @@
+cmd_/home/johnny/Documents/job2/module02/module02.ko := ld -r -m elf_x86_64 -T ./scripts/module-common.lds --build-id  -o /home/johnny/Documents/job2/module02/module02.ko /home/johnny/Documents/job2/module02/module02.o /home/johnny/Documents/job2/module02/module02.mod.o

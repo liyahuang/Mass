@@ -4,7 +4,7 @@
 int main(void)
 {
 	char cmd[5];
-	printf("input your command");
+	printf("input your command\n");
 	while(1)
 	{
 		fflush(stdin);

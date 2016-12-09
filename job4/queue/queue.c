@@ -9,12 +9,13 @@
 #include <pthread.h>
 #include <semaphore.h>
 #define MSG_FILE "queue.c"
-#define MSG_NUM 1024
+#define MSG_NUM 10
 #define BUFFER 255
 #define SENDER_FLAG 1
 #define RECEIVER_FLAG 2
 #define PERM S_IRUSR|S_IWUSR
-sem_t sem;
+sem_t sem_full_1,sem_empty_1;
+sem_t sem_full_2,sem_empty_2;
 
 typedef struct msgbuf
 {
@@ -26,10 +27,8 @@ void *send()
 	struct msgbuf msg;
 	key_t key;
 	int msqid;
-	char *myask = "I'm receiver";
-	int ret_value;
 	char message[BUFFER+1];
-	
+	int res = 0;
 	if (-1 == (key = ftok(MSG_FILE,MSG_NUM)))
 	{
 		fprintf(stderr,"creat key error:%s\n",strerror(errno));
@@ -40,42 +39,51 @@ void *send()
 		fprintf(stderr,"creat msg queue error:%s\n",strerror(errno));
 		exit(EXIT_FAILURE);
 	}
-	printf("snd key: %d\n",key);
 	msg.mtype = SENDER_FLAG; 
 	while (1)
 	{
-		puts("input message:\n");
+		printf("input message:\n");
 		scanf("%s",message);
 		strncpy(msg.mtext,message,BUFFER);
-		printf("msg send:%s\n",msg.mtext);
-		//sem_wait(&sem);
+		printf("sender - send msg :%s\n",msg.mtext);
 
-		if(strcmp(message,"exit") == 0)
+
+		if(strcmp(message,"exit") == 0)//"exit" msg
 		{
 			//发送"end"
 			strcpy(msg.mtext,"end");
-			if(-1 == msgsnd(msqid,&msg,sizeof(struct msgbuf)-sizeof(long),0))
+			sem_wait(&sem_empty_1);
+			res = msgsnd(msqid,&msg,sizeof(struct msgbuf)-sizeof(long),0);
+			sem_post(&sem_full_1);
+			if(-1 == res)
 			{
 				fprintf(stderr,"msg send error: %s",strerror(errno));
 			}
 			break;
 		}
-		if(-1 == msgsnd(msqid,&msg,sizeof(struct msgbuf)-sizeof(long),0))
+		//非"exit" msg
+		sem_wait(&sem_empty_1);
+		res = msgsnd(msqid,&msg,sizeof(struct msgbuf)-sizeof(long),0);
+		sem_post(&sem_full_1);
+		if(-1 == res)
 		{
 			fprintf(stderr,"msg send error: %s",strerror(errno));
 		}
-		//sem_post(&sem);
 	}
 	
-	//sem_wait(&sem);
-	msgsnd(msqid,&msg,sizeof(struct msgbuf)-sizeof(long),0);//send "end" message
-	//sem_post(&sem);
 	//接收
 	do
 	{
-		memset(&msg,'\0',sizeof(struct msgbuf));
+		sem_wait(&sem_full_2);
 		msgrcv(msqid,&msg,sizeof(struct msgbuf)-sizeof(long),RECEIVER_FLAG,0);
+		sem_post(&sem_empty_2);
 	}while( 0 != strcmp(msg.mtext,"over"));
+	printf("sender - get msg:%s",msg.mtext);
+	if(msgctl(msqid,IPC_RMID,NULL)<0)
+	{
+		perror("msgctl");
+		exit(1);
+	}
 	//结束程序运行
 	pthread_exit(NULL);
 	
@@ -95,24 +103,44 @@ void *receive()
         fprintf(stderr,"Creat MessageQueue Error：%s \n",strerror(errno));
         exit(EXIT_FAILURE);
     }
-	printf("rcv key: %d\n",msqid);
+
 	do
 	{
-		//sem_wait(&sem);
+		sem_wait(&sem_full_1);
 		msgrcv(msqid,&msg,BUFFER+1,SENDER_FLAG,0);
-		printf("receive message: %s\n",msg.mtext);
-		//sem_post(&sem);
+		sem_post(&sem_empty_1);
+		printf("receiver - get msg: %s\n",msg.mtext);
 	}while( 0 != strcmp(msg.mtext,"end"));
 	msg.mtype = RECEIVER_FLAG;
 	strcpy(msg.mtext,"over");
-	//sem_wait(&sem);
+	sem_wait(&sem_empty_2);
 	msgsnd(msqid,&msg,BUFFER+1,0);
-	//sem_post(&sem);
+	sem_post(&sem_full_2);
 	pthread_exit(NULL);
+
+	sem_wait(&sem_full_1);
+	msgrcv(msqid,&msg,BUFFER+1,SENDER_FLAG,0);
+	sem_post(&sem_empty_2);
+	printf("receiver - get msg: %s\n",msg.mtext);
 }
 int main()
 {
-	if(-1 == sem_init(&sem,0,1))
+	if(-1 == sem_init(&sem_full_1,0,0))//已有的mtype = 1消息的数目
+	{
+		fprintf(stderr,"semaphore init error: %s\n",strerror(errno));
+		exit(EXIT_FAILURE);
+	}
+	if(-1 == sem_init(&sem_empty_1,0,MSG_NUM))//消息队列中的空闲数
+	{
+		fprintf(stderr,"semaphore init error: %s\n",strerror(errno));
+		exit(EXIT_FAILURE);
+	}
+	if(-1 == sem_init(&sem_full_2,0,0))//已有的mtype = 2消息的数目
+	{
+		fprintf(stderr,"semaphore init error: %s\n",strerror(errno));
+		exit(EXIT_FAILURE);
+	}
+	if(-1 == sem_init(&sem_empty_2,0,1))//消息队列中的空闲数
 	{
 		fprintf(stderr,"semaphore init error: %s\n",strerror(errno));
 		exit(EXIT_FAILURE);
@@ -136,11 +164,7 @@ int main()
         perror("pthread_join failed\n");  
         exit(EXIT_FAILURE);  
     }  
-	if(msgctl(0,IPC_RMID,NULL)<0)
-	{
-		perror("msgctl");
-		exit(1);
-	}
 	
-	sem_destroy(&sem);
+	
+	sem_destroy(&sem_full_1);
 }

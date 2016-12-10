@@ -3,6 +3,6 @@
 
 int main(void)
 {
-	syscall(330,5365,0,10);
+	syscall(330,3844,1,25);
 	return 0;
 }

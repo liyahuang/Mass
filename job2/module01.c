@@ -8,7 +8,7 @@ static int display_init(void)
 
 	for_each_process(p)
 	{
-		if (p->mm !=NULL)
+		if (p->mm != NULL) //内核线程没有mm
 		{
 			continue;
 		}
